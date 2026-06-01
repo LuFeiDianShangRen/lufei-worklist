@@ -28,6 +28,16 @@ npm install
 npm run dev
 ```
 
+## 下载
+
+最新 Windows 免安装版：
+
+- [lufei-worklist-v1.0.0-windows-portable.zip](https://github.com/LuFeiDianShangRen/lufei-worklist/releases/download/v1.0.0/lufei-worklist-v1.0.0-windows-portable.zip)
+
+全部版本：
+
+- [GitHub Releases](https://github.com/LuFeiDianShangRen/lufei-worklist/releases)
+
 ## 测试
 
 ```powershell

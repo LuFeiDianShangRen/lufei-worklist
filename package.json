@@ -6,7 +6,16 @@
   "main": "dist-electron/main/main.js",
   "productName": "路飞工作清单",
   "author": "路飞",
+  "license": "MIT",
   "copyright": "路飞版权所有",
+  "homepage": "https://github.com/LuFeiDianShangRen/lufei-worklist#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/LuFeiDianShangRen/lufei-worklist.git"
+  },
+  "bugs": {
+    "url": "https://github.com/LuFeiDianShangRen/lufei-worklist/issues"
+  },
   "scripts": {
     "dev": "concurrently -k \"tsc -p tsconfig.main.json --watch --preserveWatchOutput\" \"vite --host 127.0.0.1\" \"wait-on dist-electron/main/main.js http://127.0.0.1:5173 && cross-env VITE_DEV_SERVER_URL=http://127.0.0.1:5173 electron .\"",
     "build": "tsc -p tsconfig.main.json && vite build",
