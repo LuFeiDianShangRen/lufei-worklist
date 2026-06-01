@@ -1,6 +1,6 @@
 # lufei-强提醒会议任务清单
 
-lufei Strong Reminder Meeting Task List
+lufei StrongReminderMeetingTaskList
 
 lufei-强提醒会议任务清单是一款 Windows 桌面提醒工具。软件名称为“路飞工作清单”，支持添加会议、任务和待办事项，并在指定时间前通过置顶飘动提醒条进行提醒。
 
@@ -34,11 +34,11 @@ npm run dev
 
 最新 Windows 免安装版：
 
-- [lufei-strong-reminder-meeting-task-list-v1.0.0-windows-portable.zip](https://github.com/LuFeiDianShangRen/lufei-strong-reminder-meeting-task-list/releases/download/v1.0.0/lufei-strong-reminder-meeting-task-list-v1.0.0-windows-portable.zip)
+- [lufei-strongremindermeetingtasklist-v1.0.0-windows-portable.zip](https://github.com/LuFeiDianShangRen/lufei-strongremindermeetingtasklist/releases/download/v1.0.0/lufei-strongremindermeetingtasklist-v1.0.0-windows-portable.zip)
 
 全部版本：
 
-- [GitHub Releases](https://github.com/LuFeiDianShangRen/lufei-strong-reminder-meeting-task-list/releases)
+- [GitHub Releases](https://github.com/LuFeiDianShangRen/lufei-strongremindermeetingtasklist/releases)
 
 ## 测试
 
