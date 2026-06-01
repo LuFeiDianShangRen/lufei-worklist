@@ -1,5 +1,5 @@
 {
-  "name": "lufei-worklist",
+  "name": "lufei-strong-reminder-meeting-task-list",
   "version": "1.0.0",
   "private": true,
   "description": "Windows desktop reminder app with topmost floating alerts.",
@@ -8,13 +8,13 @@
   "author": "路飞",
   "license": "MIT",
   "copyright": "路飞版权所有",
-  "homepage": "https://github.com/LuFeiDianShangRen/lufei-worklist#readme",
+  "homepage": "https://github.com/LuFeiDianShangRen/lufei-strong-reminder-meeting-task-list#readme",
   "repository": {
     "type": "git",
-    "url": "https://github.com/LuFeiDianShangRen/lufei-worklist.git"
+    "url": "https://github.com/LuFeiDianShangRen/lufei-strong-reminder-meeting-task-list.git"
   },
   "bugs": {
-    "url": "https://github.com/LuFeiDianShangRen/lufei-worklist/issues"
+    "url": "https://github.com/LuFeiDianShangRen/lufei-strong-reminder-meeting-task-list/issues"
   },
   "scripts": {
     "dev": "concurrently -k \"tsc -p tsconfig.main.json --watch --preserveWatchOutput\" \"vite --host 127.0.0.1\" \"wait-on dist-electron/main/main.js http://127.0.0.1:5173 && cross-env VITE_DEV_SERVER_URL=http://127.0.0.1:5173 electron .\"",

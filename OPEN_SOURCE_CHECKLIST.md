@@ -16,7 +16,8 @@
 
 ## 发布到 GitHub 前确认
 
-- 确认仓库名。
+- 仓库 URL 名：`lufei-strong-reminder-meeting-task-list`。
+- 公开显示名：`lufei-强提醒会议任务清单`。
 - 确认 GitHub 账号或组织。
 - 确认是否继续使用“路飞工作清单”作为公开名称。
 - 确认 README 是否需要补充截图。
