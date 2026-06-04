@@ -1,7 +1,14 @@
 import { app } from "electron";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { ACKNOWLEDGE_SNOOZE_MINUTES, getNextOccurrenceAfter, isRecurringReminder } from "../shared/scheduler";
+import {
+  buildAlertKey,
+  getAcknowledgeSnoozeMinutes,
+  getNextOccurrenceAfter,
+  IN_PROGRESS_SNOOZE_MINUTES,
+  isInProgressReminder,
+  isRecurringReminder
+} from "../shared/scheduler";
 import {
   AlertOccurrence,
   AlertRecord,
@@ -52,8 +59,10 @@ export class ReminderStore {
 
   async upsertReminder(item: ReminderItem): Promise<AppData> {
     const data = await this.load();
+    const now = new Date().toISOString();
     const index = data.reminders.findIndex((existing) => existing.id === item.id);
-    const nextItem = { ...item, updatedAt: new Date().toISOString() };
+    const nextItem = this.normalizeProgressFields({ ...item, updatedAt: now });
+    this.ensureInProgressAlert(data, nextItem, now);
 
     if (index >= 0) {
       data.reminders[index] = nextItem;
@@ -71,8 +80,10 @@ export class ReminderStore {
     let updated = 0;
 
     for (const item of items) {
+      const now = new Date().toISOString();
       const index = data.reminders.findIndex((existing) => existing.id === item.id);
-      const nextItem = { ...item, updatedAt: new Date().toISOString() };
+      const nextItem = this.normalizeProgressFields({ ...item, updatedAt: now });
+      this.ensureInProgressAlert(data, nextItem, now);
 
       if (index >= 0) {
         data.reminders[index] = nextItem;
@@ -143,10 +154,20 @@ export class ReminderStore {
       return null;
     }
 
+    const item = data.reminders.find((reminder) => reminder.id === existing.itemId);
     const now = new Date();
+    const snoozeMinutes = getAcknowledgeSnoozeMinutes(item);
+    const snoozedUntil = new Date(now.getTime() + snoozeMinutes * 60 * 1_000).toISOString();
+
     existing.lastShownAt = now.toISOString();
     existing.confirmedAt = null;
-    existing.snoozedUntil = new Date(now.getTime() + ACKNOWLEDGE_SNOOZE_MINUTES * 60 * 1_000).toISOString();
+    existing.snoozedUntil = snoozedUntil;
+
+    if (isInProgressReminder(item)) {
+      item.progressSnoozedUntil = snoozedUntil;
+      item.updatedAt = now.toISOString();
+    }
+
     await this.save();
     return existing;
   }
@@ -192,33 +213,91 @@ export class ReminderStore {
     };
   }
 
-  private normalizeReminder(item: ReminderItem, settings: AppSettings): ReminderItem {
-    if (!item.completedAt || !isRecurringReminder(item)) {
-      return item;
+  private normalizeProgressFields(item: ReminderItem): ReminderItem {
+    if (item.completedAt) {
+      return {
+        ...item,
+        progressStatus: "todo",
+        progressSnoozedUntil: null
+      };
     }
 
-    const completedAt = new Date(item.completedAt).getTime();
+    if (item.progressStatus === "inProgress") {
+      return {
+        ...item,
+        progressStatus: "inProgress",
+        progressSnoozedUntil: item.progressSnoozedUntil ?? null
+      };
+    }
+
+    return {
+      ...item,
+      progressStatus: "todo",
+      progressSnoozedUntil: null
+    };
+  }
+
+  private ensureInProgressAlert(data: AppData, item: ReminderItem, nowIso: string): void {
+    if (!isInProgressReminder(item)) {
+      return;
+    }
+
+    const now = new Date(nowIso);
+    const snoozedUntil =
+      item.progressSnoozedUntil && new Date(item.progressSnoozedUntil).getTime() > now.getTime()
+        ? item.progressSnoozedUntil
+        : new Date(now.getTime() + IN_PROGRESS_SNOOZE_MINUTES * 60 * 1_000).toISOString();
+    const leadMinutes = item.leadMinutes[0] ?? 15;
+    const key = buildAlertKey(item.id, item.startAt, leadMinutes);
+    const existing = data.alerts[key];
+
+    item.progressSnoozedUntil = snoozedUntil;
+    data.alerts[key] = {
+      key,
+      itemId: item.id,
+      occurrenceAt: item.startAt,
+      remindAt: existing?.remindAt ?? nowIso,
+      leadMinutes,
+      triggeredAt: existing?.triggeredAt ?? nowIso,
+      lastShownAt: existing?.lastShownAt ?? nowIso,
+      confirmedAt: null,
+      snoozedUntil
+    };
+  }
+
+  private normalizeReminder(item: ReminderItem, settings: AppSettings): ReminderItem {
+    const normalizedItem = this.normalizeProgressFields(item);
+
+    if (!normalizedItem.completedAt || !isRecurringReminder(normalizedItem)) {
+      return normalizedItem;
+    }
+
+    const completedAt = new Date(normalizedItem.completedAt).getTime();
     const startAt = new Date(item.startAt).getTime();
     const after = new Date(Math.max(completedAt, startAt));
     const nextOccurrence = getNextOccurrenceAfter(
       {
-        ...item,
+        ...normalizedItem,
         completedAt: null,
-        enabled: true
+        enabled: true,
+        progressStatus: "todo",
+        progressSnoozedUntil: null
       },
       after,
       settings
     );
 
     if (!nextOccurrence) {
-      return item;
+      return normalizedItem;
     }
 
     return {
-      ...item,
+      ...normalizedItem,
       startAt: nextOccurrence.toISOString(),
       completedAt: null,
-      enabled: true
+      enabled: true,
+      progressStatus: "todo",
+      progressSnoozedUntil: null
     };
   }
 }

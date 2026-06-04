@@ -22,6 +22,7 @@ import { isChinaWorkday, isPlainWorkday } from "./holidays";
 
 const MAX_ENUMERATED_OCCURRENCES = 3_000;
 export const ACKNOWLEDGE_SNOOZE_MINUTES = 10;
+export const IN_PROGRESS_SNOOZE_MINUTES = 30;
 
 export function buildAlertKey(itemId: string, occurrenceAt: string, leadMinutes: LeadMinutes): string {
   return `${itemId}|${occurrenceAt}|${leadMinutes}`;
@@ -43,6 +44,22 @@ export function isAlertSnoozed(alert: AlertRecord | undefined, now: Date): boole
   }
 
   return false;
+}
+
+export function isInProgressReminder(item: ReminderItem | null | undefined): item is ReminderItem {
+  return Boolean(item && !item.completedAt && item.progressStatus === "inProgress");
+}
+
+export function getAcknowledgeSnoozeMinutes(item: ReminderItem | null | undefined): number {
+  return isInProgressReminder(item) ? IN_PROGRESS_SNOOZE_MINUTES : ACKNOWLEDGE_SNOOZE_MINUTES;
+}
+
+export function isReminderProgressSnoozed(item: ReminderItem, now: Date): boolean {
+  if (!isInProgressReminder(item) || !item.progressSnoozedUntil) {
+    return false;
+  }
+
+  return new Date(item.progressSnoozedUntil).getTime() > now.getTime();
 }
 
 export function isRecurringReminder(item: ReminderItem): boolean {
@@ -223,6 +240,10 @@ export function getDueAlerts(
   const due: AlertOccurrence[] = [];
 
   for (const item of reminders) {
+    if (isReminderProgressSnoozed(item, now)) {
+      continue;
+    }
+
     const occurrences = enumerateOccurrences(item, windowStart, occurrenceEnd, settings);
 
     for (const occurrence of occurrences) {
@@ -265,7 +286,7 @@ export function getUnconfirmedAlerts(
     .reduce<AlertOccurrence[]>((items, alert) => {
       const item = reminderMap.get(alert.itemId);
 
-      if (!item || !item.enabled || item.completedAt || isAlertSnoozed(alert, now)) {
+      if (!item || !item.enabled || item.completedAt || isAlertSnoozed(alert, now) || isReminderProgressSnoozed(item, now)) {
         return items;
       }
 

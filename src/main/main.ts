@@ -11,7 +11,8 @@ import {
   Tray
 } from "electron";
 import { readFile, writeFile } from "node:fs/promises";
-import { connect, createServer, type Server } from "node:net";
+import type { Server as HttpServer } from "node:http";
+import { connect, createServer as createNetServer, type Server } from "node:net";
 import { join } from "node:path";
 import { createBackup, mergeBackup, parseBackup } from "../shared/backup";
 import { tickTickTaskToReminder } from "../shared/ticktick";
@@ -20,6 +21,7 @@ import { ReminderScheduler } from "./scheduler";
 import { ReminderStore } from "./store";
 import { authorizeTickTick, fetchTickTickProjectData } from "./ticktick";
 import { createTrayIconPng } from "./trayIcon";
+import { desktopWebUrl, startDesktopWebServer } from "./webServer";
 
 const appId = "com.lufei.worklist";
 const isDev = Boolean(process.env.VITE_DEV_SERVER_URL);
@@ -30,10 +32,12 @@ let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
 let quitting = false;
 let scheduler: ReminderScheduler;
+let desktopWebServer: HttpServer | null = null;
 let pendingSecondInstanceShow = false;
 let singleInstanceServer: Server | null = null;
 const store = new ReminderStore();
 const overlayWindows = new Map<string, BrowserWindow[]>();
+const overlayWindowKeys = new Map<number, string>();
 const singleInstancePipePath =
   process.platform === "win32"
     ? "\\\\.\\pipe\\lufei-worklist-single-instance"
@@ -79,6 +83,7 @@ function createApplicationMenu(): Menu {
       label: "文件",
       submenu: [
         { label: "打开主窗口", click: () => showMainWindow() },
+        { label: "打开网页版", click: () => openDesktopWebVersion() },
         { label: "关于路飞清单", click: () => showAboutDialog() },
         { type: "separator" },
         {
@@ -139,6 +144,7 @@ function createTray(): void {
   tray.setContextMenu(
     Menu.buildFromTemplate([
       { label: "打开路飞工作清单", click: () => showMainWindow() },
+      { label: "打开网页版", click: () => openDesktopWebVersion() },
       { type: "separator" },
       {
         label: "退出",
@@ -150,6 +156,10 @@ function createTray(): void {
     ])
   );
   tray.on("double-click", () => showMainWindow());
+}
+
+function openDesktopWebVersion(): void {
+  void shell.openExternal(desktopWebUrl());
 }
 
 async function createMainWindow(hidden = false): Promise<void> {
@@ -265,7 +275,7 @@ function notifyExistingInstance(): Promise<void> {
 
 function acquireRuntimeLock(): Promise<boolean> {
   return new Promise((resolve) => {
-    const server = createServer((socket) => {
+    const server = createNetServer((socket) => {
       socket.resume();
       showMainWindowWhenReady();
     });
@@ -315,6 +325,7 @@ function createOverlayWindow(alert: AlertOccurrence, displayBounds: Electron.Rec
       nodeIntegration: false
     }
   });
+  overlayWindowKeys.set(overlay.id, alert.key);
 
   overlay.setAlwaysOnTop(true, "screen-saver");
   overlay.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
@@ -330,6 +341,7 @@ function createOverlayWindow(alert: AlertOccurrence, displayBounds: Electron.Rec
   });
 
   overlay.on("closed", () => {
+    overlayWindowKeys.delete(overlay.id);
     const windows = overlayWindows.get(alert.key);
 
     if (!windows) {
@@ -350,29 +362,13 @@ function createOverlayWindow(alert: AlertOccurrence, displayBounds: Electron.Rec
 }
 
 function closeOverlayWindows(key: string): void {
-  const windows = (overlayWindows.get(key) ?? []).filter((window) => !window.isDestroyed());
+  const trackedWindows = overlayWindows.get(key) ?? [];
+  const keyedWindows = BrowserWindow.getAllWindows().filter((window) => overlayWindowKeys.get(window.id) === key);
+  const windows = Array.from(new Set([...trackedWindows, ...keyedWindows])).filter((window) => !window.isDestroyed());
   overlayWindows.delete(key);
 
   for (const window of windows) {
-    window.close();
-  }
-}
-
-function closeAllOverlayWindows(): void {
-  const trackedWindows = Array.from(overlayWindows.values()).flat();
-  const untrackedOverlayWindows = BrowserWindow.getAllWindows().filter((window) => {
-    if (window.isDestroyed()) {
-      return false;
-    }
-
-    return window.webContents.getURL().includes("overlay.html");
-  });
-  const windows = Array.from(new Set([...trackedWindows, ...untrackedOverlayWindows])).filter(
-    (window) => !window.isDestroyed()
-  );
-  overlayWindows.clear();
-
-  for (const window of windows) {
+    overlayWindowKeys.delete(window.id);
     window.close();
   }
 }
@@ -427,6 +423,11 @@ function performMenuAction(action: string, sourceWindow: BrowserWindow | null): 
 
   if (action === "file-open") {
     showMainWindow();
+    return;
+  }
+
+  if (action === "file-web") {
+    openDesktopWebVersion();
     return;
   }
 
@@ -614,7 +615,7 @@ function registerIpc(): void {
   });
 
   ipcMain.on("overlay:acknowledge", (_event, key: string) => {
-    closeAllOverlayWindows();
+    closeOverlayWindows(key);
     void store
       .acknowledgeAlert(key)
       .then(() => store.getData())
@@ -652,6 +653,12 @@ function registerAppLifecycle(): void {
     registerIpc();
 
     scheduler = new ReminderScheduler(store, showAlert);
+    desktopWebServer = await startDesktopWebServer({
+      store,
+      staticRoot: join(__dirname, "..", "..", "dist"),
+      getScheduler: () => scheduler ?? null,
+      broadcastDataChanged
+    });
     scheduler.start();
 
     const hiddenByArgument = process.argv.includes("--hidden");
@@ -668,6 +675,8 @@ function registerAppLifecycle(): void {
     quitting = true;
     singleInstanceServer?.close();
     singleInstanceServer = null;
+    desktopWebServer?.close();
+    desktopWebServer = null;
     scheduler?.stop();
   });
 

@@ -77,6 +77,62 @@ describe("reminder scheduling", () => {
     expect(due).toHaveLength(0);
   });
 
+  it("does not schedule in-progress reminders until their thirty minute snooze expires", () => {
+    const settings = defaultSettings();
+    const item = makeReminder({
+      progressStatus: "inProgress",
+      progressSnoozedUntil: "2026-05-30T10:25:00.000Z"
+    });
+
+    expect(
+      getDueAlerts(
+        [item],
+        {},
+        settings,
+        new Date("2026-05-30T09:55:00.000Z"),
+        new Date("2026-05-30T09:40:00.000Z")
+      )
+    ).toHaveLength(0);
+
+    expect(
+      getUnconfirmedAlerts(
+        [item],
+        {
+          [buildAlertKey(item.id, item.startAt, 5)]: {
+            key: buildAlertKey(item.id, item.startAt, 5),
+            itemId: item.id,
+            occurrenceAt: item.startAt,
+            remindAt: "2026-05-30T09:55:00.000Z",
+            leadMinutes: 5,
+            triggeredAt: "2026-05-30T09:55:00.000Z",
+            lastShownAt: "2026-05-30T09:55:00.000Z",
+            confirmedAt: null
+          }
+        },
+        new Date("2026-05-30T10:24:59.000Z")
+      )
+    ).toHaveLength(0);
+
+    expect(
+      getUnconfirmedAlerts(
+        [item],
+        {
+          [buildAlertKey(item.id, item.startAt, 5)]: {
+            key: buildAlertKey(item.id, item.startAt, 5),
+            itemId: item.id,
+            occurrenceAt: item.startAt,
+            remindAt: "2026-05-30T09:55:00.000Z",
+            leadMinutes: 5,
+            triggeredAt: "2026-05-30T09:55:00.000Z",
+            lastShownAt: "2026-05-30T09:55:00.000Z",
+            confirmedAt: null
+          }
+        },
+        new Date("2026-05-30T10:25:01.000Z")
+      )
+    ).toHaveLength(1);
+  });
+
   it("finds the next occurrence for a completed daily reminder", () => {
     const item = makeReminder({
       startAt: "2026-06-02T10:00:00.000Z",

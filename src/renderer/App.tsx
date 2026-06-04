@@ -1,6 +1,7 @@
 import {
   CalendarClock,
   Check,
+  Clock3,
   Download,
   History,
   Inbox,
@@ -16,11 +17,12 @@ import {
   SquareCheck,
   Trash2,
   Upload,
-  Volume2
+  Volume2,
+  X
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { toDateKey } from "../shared/date";
-import { getNextOccurrenceAfter, isRecurringReminder } from "../shared/scheduler";
+import { getNextOccurrenceAfter, IN_PROGRESS_SNOOZE_MINUTES, isRecurringReminder } from "../shared/scheduler";
 import {
   AppData,
   AppSettings,
@@ -32,7 +34,7 @@ import {
   ReminderItem
 } from "../shared/types";
 
-type ViewKey = "all" | "today" | "previous" | "future" | "completed" | "disabled";
+type ViewKey = "all" | "today" | "previous" | "future" | "inProgress" | "completed" | "disabled";
 
 const menuGroups = [
   {
@@ -40,6 +42,7 @@ const menuGroups = [
     label: "文件",
     items: [
       { label: "打开主窗口", action: "file-open" },
+      { label: "打开网页版", action: "file-web" },
       { label: "关于路飞清单", action: "file-about" },
       { label: "退出", action: "file-exit", separatorBefore: true }
     ]
@@ -119,6 +122,8 @@ function newReminder(settings: AppSettings): ReminderItem {
     holidayPolicy: defaultHolidayPolicy(),
     enabled: true,
     completedAt: null,
+    progressStatus: "todo",
+    progressSnoozedUntil: null,
     createdAt: now,
     updatedAt: now
   };
@@ -153,6 +158,14 @@ function isFuture(value: string): boolean {
 
 function isCompleted(item: ReminderItem): boolean {
   return Boolean(item.completedAt);
+}
+
+function isInProgress(item: ReminderItem): boolean {
+  return !isCompleted(item) && item.progressStatus === "inProgress";
+}
+
+function inProgressSnoozedUntil(): string {
+  return new Date(Date.now() + IN_PROGRESS_SNOOZE_MINUTES * 60 * 1_000).toISOString();
 }
 
 function pad2(value: number): string {
@@ -217,6 +230,9 @@ export function App(): JSX.Element {
   const [draft, setDraft] = useState<ReminderItem | null>(null);
   const [activeView, setActiveView] = useState<ViewKey>("all");
   const [openMenu, setOpenMenu] = useState<string | null>(null);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [tickTickModalOpen, setTickTickModalOpen] = useState(false);
+  const [statusMenuId, setStatusMenuId] = useState<string | null>(null);
   const [status, setStatus] = useState("");
   const [tickTickDraft, setTickTickDraft] = useState(defaultSettings().tickTickSync);
 
@@ -254,13 +270,28 @@ export function App(): JSX.Element {
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent): void => {
       if (event.key === "Escape") {
+        if (settingsOpen) {
+          setSettingsOpen(false);
+          return;
+        }
+
+        if (tickTickModalOpen) {
+          setTickTickModalOpen(false);
+          return;
+        }
+
+        if (statusMenuId) {
+          setStatusMenuId(null);
+          return;
+        }
+
         void window.reminderApi.performMenuAction("view-exit-fullscreen");
       }
     };
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, []);
+  }, [settingsOpen, statusMenuId, tickTickModalOpen]);
 
   useEffect(() => {
     setTickTickDraft(data.settings.tickTickSync);
@@ -284,6 +315,11 @@ export function App(): JSX.Element {
     [sortedReminders]
   );
 
+  const inProgressReminders = useMemo(
+    () => activeReminders.filter((item) => isInProgress(item)),
+    [activeReminders]
+  );
+
   const visibleReminders = useMemo(() => {
     if (activeView === "today") {
       return activeReminders.filter((item) => item.enabled && isToday(item.startAt));
@@ -294,6 +330,9 @@ export function App(): JSX.Element {
     if (activeView === "future") {
       return activeReminders.filter((item) => item.enabled && isFuture(item.startAt));
     }
+    if (activeView === "inProgress") {
+      return inProgressReminders;
+    }
     if (activeView === "completed") {
       return completedReminders;
     }
@@ -301,7 +340,7 @@ export function App(): JSX.Element {
       return activeReminders.filter((item) => !item.enabled);
     }
     return activeReminders;
-  }, [activeReminders, activeView, completedReminders]);
+  }, [activeReminders, activeView, completedReminders, inProgressReminders]);
 
   const navItems = useMemo(
     () => [
@@ -309,10 +348,11 @@ export function App(): JSX.Element {
       { key: "today" as const, label: "今天", icon: CalendarClock, count: activeReminders.filter((item) => item.enabled && isToday(item.startAt)).length },
       { key: "previous" as const, label: "之前", icon: History, count: activeReminders.filter((item) => item.enabled && isBeforeToday(item.startAt)).length },
       { key: "future" as const, label: "之后", icon: Inbox, count: activeReminders.filter((item) => item.enabled && isFuture(item.startAt)).length },
+      { key: "inProgress" as const, label: "进行中", icon: Clock3, count: inProgressReminders.length },
       { key: "completed" as const, label: "已完成", icon: ListChecks, count: completedReminders.length },
       { key: "disabled" as const, label: "已停用", icon: Power, count: activeReminders.filter((item) => !item.enabled).length }
     ],
-    [activeReminders, completedReminders]
+    [activeReminders, completedReminders, inProgressReminders]
   );
 
   const viewTitle = navItems.find((item) => item.key === activeView)?.label ?? "全部";
@@ -358,13 +398,22 @@ export function App(): JSX.Element {
   };
 
   const selectReminder = (item: ReminderItem): void => {
+    setStatusMenuId(null);
     setSelectedId(item.id);
     setDraft(item);
     setStatus("");
   };
 
-  const toggleCompleted = async (item: ReminderItem): Promise<void> => {
+  const completeReminder = async (item: ReminderItem): Promise<void> => {
+    setStatusMenuId(null);
     const completed = isCompleted(item);
+    if (completed) {
+      setSelectedId(item.id);
+      setDraft(item);
+      setStatus("该任务已经完成。");
+      return;
+    }
+
     if (!completed && isRecurringReminder(item)) {
       const after = new Date(Math.max(Date.now(), new Date(item.startAt).getTime()));
       const nextOccurrence = getNextOccurrenceAfter(item, after, data.settings);
@@ -374,7 +423,9 @@ export function App(): JSX.Element {
           ...item,
           startAt: nextOccurrence.toISOString(),
           completedAt: null,
-          enabled: true
+          enabled: true,
+          progressStatus: "todo",
+          progressSnoozedUntil: null
         });
         const saved = next.reminders.find((reminder) => reminder.id === item.id) ?? null;
 
@@ -388,16 +439,36 @@ export function App(): JSX.Element {
 
     const next = await window.reminderApi.saveReminder({
       ...item,
-      completedAt: completed ? null : new Date().toISOString(),
-      enabled: completed ? true : false
+      completedAt: new Date().toISOString(),
+      enabled: false,
+      progressStatus: "todo",
+      progressSnoozedUntil: null
     });
     const saved = next.reminders.find((reminder) => reminder.id === item.id) ?? null;
 
     setData(next);
     setSelectedId(saved?.id ?? null);
     setDraft(saved);
-    setActiveView(completed ? "all" : "completed");
-    setStatus(completed ? "已恢复到全部。" : "已完成，已移入已完成。");
+    setActiveView("completed");
+    setStatus("已完成，已移入已完成。");
+  };
+
+  const markInProgress = async (item: ReminderItem): Promise<void> => {
+    setStatusMenuId(null);
+    const next = await window.reminderApi.saveReminder({
+      ...item,
+      completedAt: null,
+      enabled: true,
+      progressStatus: "inProgress",
+      progressSnoozedUntil: inProgressSnoozedUntil()
+    });
+    const saved = next.reminders.find((reminder) => reminder.id === item.id) ?? null;
+
+    setData(next);
+    setSelectedId(saved?.id ?? null);
+    setDraft(saved);
+    setActiveView("inProgress");
+    setStatus("已标记为进行中，30 分钟后会再次飘窗。");
   };
 
   const updateSettings = async (settings: AppSettings): Promise<void> => {
@@ -503,145 +574,14 @@ export function App(): JSX.Element {
         </nav>
 
         <div className="sidebar-settings">
-          <h2>
+          <button type="button" className="settings-open-button" onClick={() => setSettingsOpen(true)}>
             <Settings size={16} />
             设置
-          </h2>
-          <label className="switch-row">
-            <span>开机启动</span>
-            <input
-              type="checkbox"
-              checked={data.settings.startAtLogin}
-              onChange={(event) => void updateSettings({ ...data.settings, startAtLogin: event.target.checked })}
-            />
-          </label>
-          <label className="switch-row">
-            <span>提示音</span>
-            <input
-              type="checkbox"
-              checked={data.settings.soundEnabled}
-              onChange={(event) => void updateSettings({ ...data.settings, soundEnabled: event.target.checked })}
-            />
-          </label>
-          <details className="compact-details sync-details">
-            <summary>滴答清单同步</summary>
-            <label className="setting-field">
-              <span>账号区域</span>
-              <select
-                value={tickTickDraft.service}
-                onChange={(event) => setTickTickDraft({ ...tickTickDraft, service: event.target.value as typeof tickTickDraft.service })}
-              >
-                <option value="dida365">滴答清单</option>
-                <option value="ticktick">TickTick</option>
-              </select>
-            </label>
-            <label className="setting-field">
-              <span>客户端 ID</span>
-              <input
-                value={tickTickDraft.clientId}
-                onChange={(event) => setTickTickDraft({ ...tickTickDraft, clientId: event.target.value })}
-              />
-            </label>
-            <label className="setting-field">
-              <span>客户端密钥</span>
-              <input
-                type="password"
-                value={tickTickDraft.clientSecret}
-                onChange={(event) => setTickTickDraft({ ...tickTickDraft, clientSecret: event.target.value })}
-              />
-            </label>
-            <label className="setting-field">
-              <span>回调地址</span>
-              <input
-                value={tickTickDraft.redirectUri}
-                onChange={(event) => setTickTickDraft({ ...tickTickDraft, redirectUri: event.target.value })}
-              />
-            </label>
-            <p className="setting-note">先在滴答清单开发者中心创建应用，并保存相同回调地址。</p>
-            <p className="setting-note">OAuth Error 通常表示网页应用里没有登记回调地址。</p>
-            <p className="setting-note">
-              上次同步：{tickTickDraft.lastSyncAt ? new Date(tickTickDraft.lastSyncAt).toLocaleString() : "未同步"}
-            </p>
-            <div className="sidebar-tools sync-tools">
-              <button type="button" onClick={() => void saveTickTickSettings()}>
-                <Save size={16} />
-                保存
-              </button>
-              <button type="button" onClick={() => void connectTickTick()}>
-                <Plug size={16} />
-                连接
-              </button>
-              <button type="button" onClick={() => void syncTickTick()}>
-                <RefreshCw size={16} />
-                同步
-              </button>
-            </div>
-          </details>
-          <details className="compact-details">
-            <summary>更多设置</summary>
-            <label className="setting-field">
-              <span>循环间隔（秒）</span>
-              <input
-                type="number"
-                min={10}
-                value={data.settings.overlayRepeatSeconds}
-                onChange={(event) =>
-                  void updateSettings({
-                    ...data.settings,
-                    overlayRepeatSeconds: Math.max(10, Number(event.target.value))
-                  })
-                }
-              />
-            </label>
-            <label className="setting-field">
-              <span>手动节假日</span>
-              <textarea
-                rows={2}
-                value={data.settings.holidayOverrides.holidays.join(", ")}
-                onChange={(event) =>
-                  void updateSettings({
-                    ...data.settings,
-                    holidayOverrides: {
-                      ...data.settings.holidayOverrides,
-                      holidays: event.target.value
-                        .split(",")
-                        .map((value) => value.trim())
-                        .filter(Boolean)
-                    }
-                  })
-                }
-              />
-            </label>
-            <label className="setting-field">
-              <span>手动补班日</span>
-              <textarea
-                rows={2}
-                value={data.settings.holidayOverrides.workdays.join(", ")}
-                onChange={(event) =>
-                  void updateSettings({
-                    ...data.settings,
-                    holidayOverrides: {
-                      ...data.settings.holidayOverrides,
-                      workdays: event.target.value
-                        .split(",")
-                        .map((value) => value.trim())
-                        .filter(Boolean)
-                    }
-                  })
-                }
-              />
-            </label>
-          </details>
-          <div className="sidebar-tools">
-            <button type="button" onClick={() => window.reminderApi.importBackup().then(() => setStatus("导入完成。"))}>
-              <Upload size={16} />
-              导入
-            </button>
-            <button type="button" onClick={() => window.reminderApi.exportBackup().then(() => setStatus("导出完成。"))}>
-              <Download size={16} />
-              导出
-            </button>
-          </div>
+          </button>
+          <button type="button" className="settings-open-button" onClick={() => setTickTickModalOpen(true)}>
+            <Settings size={16} />
+            滴答清单同步
+          </button>
         </div>
       </aside>
 
@@ -665,41 +605,61 @@ export function App(): JSX.Element {
           {visibleReminders.length === 0 ? (
             <div className="empty-list">这个清单里还没有提醒。</div>
           ) : (
-            visibleReminders.map((item) => (
-              <div
-                key={item.id}
-                role="button"
-                tabIndex={0}
-                className={`reminder-row ${item.id === selectedId ? "selected" : ""} ${isCompleted(item) ? "completed" : ""}`}
-                onClick={() => selectReminder(item)}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter" || event.key === " ") {
-                    event.preventDefault();
-                    selectReminder(item);
-                  }
-                }}
-              >
-                <button
-                  type="button"
-                  className={`complete-toggle ${isCompleted(item) ? "completed" : ""}`}
-                  title={isCompleted(item) ? "恢复为未完成" : "完成"}
-                  aria-label={isCompleted(item) ? "恢复为未完成" : "完成"}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    void toggleCompleted(item);
+            visibleReminders.map((item) => {
+              const completed = isCompleted(item);
+              const inProgress = isInProgress(item);
+
+              return (
+                <div
+                  key={item.id}
+                  role="button"
+                  tabIndex={0}
+                  className={`reminder-row ${item.id === selectedId ? "selected" : ""} ${completed ? "completed" : ""} ${inProgress ? "in-progress" : ""}`}
+                  onClick={() => selectReminder(item)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      selectReminder(item);
+                    }
                   }}
-                  onKeyDown={(event) => event.stopPropagation()}
                 >
-                  {isCompleted(item) ? <SquareCheck size={18} /> : <Square size={18} />}
-                </button>
-                <span className="reminder-main">
-                  <span className="reminder-title">{item.title}</span>
-                  <span className="reminder-meta">
-                    {new Date(item.startAt).toLocaleString()} · 提前 {item.leadMinutes.join(" / ")} 分钟
+                  <span className="status-action">
+                    <button
+                      type="button"
+                      className={`complete-toggle ${completed ? "completed" : ""} ${inProgress ? "in-progress" : ""}`}
+                      title="选择任务状态"
+                      aria-label="选择任务状态"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        setStatusMenuId((current) => (current === item.id ? null : item.id));
+                      }}
+                      onKeyDown={(event) => event.stopPropagation()}
+                    >
+                      {completed ? <SquareCheck size={18} /> : inProgress ? <Clock3 size={18} /> : <Square size={18} />}
+                    </button>
+                    {statusMenuId === item.id ? (
+                      <span className="status-choice-menu" onClick={(event) => event.stopPropagation()}>
+                        <button type="button" className="complete-choice" onClick={() => void completeReminder(item)}>
+                          <SquareCheck size={15} />
+                          完成
+                        </button>
+                        <button type="button" className="progress-choice" onClick={() => void markInProgress(item)}>
+                          <Clock3 size={15} />
+                          进行中
+                        </button>
+                      </span>
+                    ) : null}
                   </span>
-                </span>
-              </div>
-            ))
+                  <span className="reminder-main">
+                    <span className="reminder-title">{item.title}</span>
+                    <span className="reminder-meta">
+                      {inProgress ? <span className="progress-label">进行中</span> : null}
+                      {new Date(item.startAt).toLocaleString()} · 提前 {item.leadMinutes.join(" / ")} 分钟
+                    </span>
+                  </span>
+                </div>
+              );
+            })
           )}
         </div>
       </section>
@@ -1012,6 +972,214 @@ export function App(): JSX.Element {
         )}
       </main>
       </div>
+      {settingsOpen ? (
+        <div className="settings-modal-backdrop" role="presentation" onMouseDown={() => setSettingsOpen(false)}>
+          <section
+            className="settings-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="settings-modal-title"
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <header className="settings-modal-header">
+              <h2 id="settings-modal-title">
+                <Settings size={18} />
+                设置
+              </h2>
+              <button
+                type="button"
+                className="modal-close-button"
+                aria-label="关闭设置"
+                onClick={() => setSettingsOpen(false)}
+              >
+                <X size={18} />
+              </button>
+            </header>
+
+            <div className="settings-modal-content">
+              <section className="settings-section">
+                <h3>常用</h3>
+                <label className="switch-row">
+                  <span>开机启动</span>
+                  <input
+                    type="checkbox"
+                    checked={data.settings.startAtLogin}
+                    onChange={(event) => void updateSettings({ ...data.settings, startAtLogin: event.target.checked })}
+                  />
+                </label>
+                <label className="switch-row">
+                  <span>提示音</span>
+                  <input
+                    type="checkbox"
+                    checked={data.settings.soundEnabled}
+                    onChange={(event) => void updateSettings({ ...data.settings, soundEnabled: event.target.checked })}
+                  />
+                </label>
+              </section>
+
+              <section className="settings-section">
+                <h3>更多设置</h3>
+                <label className="setting-field">
+                  <span>循环间隔（秒）</span>
+                  <input
+                    type="number"
+                    min={10}
+                    value={data.settings.overlayRepeatSeconds}
+                    onChange={(event) =>
+                      void updateSettings({
+                        ...data.settings,
+                        overlayRepeatSeconds: Math.max(10, Number(event.target.value))
+                      })
+                    }
+                  />
+                </label>
+                <label className="setting-field">
+                  <span>手动节假日</span>
+                  <textarea
+                    rows={2}
+                    value={data.settings.holidayOverrides.holidays.join(", ")}
+                    onChange={(event) =>
+                      void updateSettings({
+                        ...data.settings,
+                        holidayOverrides: {
+                          ...data.settings.holidayOverrides,
+                          holidays: event.target.value
+                            .split(",")
+                            .map((value) => value.trim())
+                            .filter(Boolean)
+                        }
+                      })
+                    }
+                  />
+                </label>
+                <label className="setting-field">
+                  <span>手动补班日</span>
+                  <textarea
+                    rows={2}
+                    value={data.settings.holidayOverrides.workdays.join(", ")}
+                    onChange={(event) =>
+                      void updateSettings({
+                        ...data.settings,
+                        holidayOverrides: {
+                          ...data.settings.holidayOverrides,
+                          workdays: event.target.value
+                            .split(",")
+                            .map((value) => value.trim())
+                            .filter(Boolean)
+                        }
+                      })
+                    }
+                  />
+                </label>
+              </section>
+
+              <section className="settings-section">
+                <h3>数据</h3>
+                <div className="settings-data-actions">
+                  <button
+                    type="button"
+                    onClick={() => window.reminderApi.importBackup().then(() => setStatus("导入完成。"))}
+                  >
+                    <Upload size={16} />
+                    导入
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => window.reminderApi.exportBackup().then(() => setStatus("导出完成。"))}
+                  >
+                    <Download size={16} />
+                    导出
+                  </button>
+                </div>
+              </section>
+            </div>
+          </section>
+        </div>
+      ) : null}
+      {tickTickModalOpen ? (
+        <div className="settings-modal-backdrop" role="presentation" onMouseDown={() => setTickTickModalOpen(false)}>
+          <section
+            className="settings-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="ticktick-modal-title"
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <header className="settings-modal-header">
+              <h2 id="ticktick-modal-title">
+                <Settings size={18} />
+                滴答清单同步
+              </h2>
+              <button
+                type="button"
+                className="modal-close-button"
+                aria-label="关闭滴答清单同步"
+                onClick={() => setTickTickModalOpen(false)}
+              >
+                <X size={18} />
+              </button>
+            </header>
+
+            <div className="settings-modal-content">
+              <section className="settings-section">
+                <label className="setting-field">
+                  <span>账号区域</span>
+                  <select
+                    value={tickTickDraft.service}
+                    onChange={(event) =>
+                      setTickTickDraft({ ...tickTickDraft, service: event.target.value as typeof tickTickDraft.service })
+                    }
+                  >
+                    <option value="dida365">滴答清单</option>
+                    <option value="ticktick">TickTick</option>
+                  </select>
+                </label>
+                <label className="setting-field">
+                  <span>客户端 ID</span>
+                  <input
+                    value={tickTickDraft.clientId}
+                    onChange={(event) => setTickTickDraft({ ...tickTickDraft, clientId: event.target.value })}
+                  />
+                </label>
+                <label className="setting-field">
+                  <span>客户端密钥</span>
+                  <input
+                    type="password"
+                    value={tickTickDraft.clientSecret}
+                    onChange={(event) => setTickTickDraft({ ...tickTickDraft, clientSecret: event.target.value })}
+                  />
+                </label>
+                <label className="setting-field">
+                  <span>回调地址</span>
+                  <input
+                    value={tickTickDraft.redirectUri}
+                    onChange={(event) => setTickTickDraft({ ...tickTickDraft, redirectUri: event.target.value })}
+                  />
+                </label>
+                <p className="setting-note">先在滴答清单开发者中心创建应用，并保存相同回调地址。</p>
+                <p className="setting-note">OAuth Error 通常表示网页应用里没有登记回调地址。</p>
+                <p className="setting-note">
+                  上次同步：{tickTickDraft.lastSyncAt ? new Date(tickTickDraft.lastSyncAt).toLocaleString() : "未同步"}
+                </p>
+                <div className="settings-sync-actions">
+                  <button type="button" onClick={() => void saveTickTickSettings()}>
+                    <Save size={16} />
+                    保存
+                  </button>
+                  <button type="button" onClick={() => void connectTickTick()}>
+                    <Plug size={16} />
+                    连接
+                  </button>
+                  <button type="button" onClick={() => void syncTickTick()}>
+                    <RefreshCw size={16} />
+                    同步
+                  </button>
+                </div>
+              </section>
+            </div>
+          </section>
+        </div>
+      ) : null}
     </div>
   );
 }

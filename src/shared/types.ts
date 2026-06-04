@@ -2,6 +2,7 @@ export const LEAD_MINUTES = [5, 10, 15, 20, 25, 30, 60, 120] as const;
 
 export type LeadMinutes = (typeof LEAD_MINUTES)[number];
 export type RecurrenceFrequency = "none" | "daily" | "weekly" | "monthly" | "yearly";
+export type ReminderProgressStatus = "todo" | "inProgress";
 export type StartupDisplayMode = "visible" | "tray";
 export type TickTickService = "dida365" | "ticktick";
 
@@ -35,6 +36,8 @@ export interface ReminderItem {
   holidayPolicy: HolidayPolicy;
   enabled: boolean;
   completedAt?: string | null;
+  progressStatus?: ReminderProgressStatus;
+  progressSnoozedUntil?: string | null;
   createdAt: string;
   updatedAt: string;
 }

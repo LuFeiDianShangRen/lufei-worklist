@@ -1,10 +1,10 @@
 {
-  "name": "lufei-strongremindermeetingtasklist",
-  "version": "1.0.5",
+  "name": "strongremindermeetingtasklist",
+  "version": "1.0.6",
   "private": true,
-  "description": "Lufei Strong Reminder Meeting Task List for Windows.",
+  "description": "Strong Reminder Meeting Task List for Windows.",
   "main": "dist-electron/main/main.js",
-  "productName": "路飞-强提醒会议任务清单",
+  "productName": "路飞工作清单",
   "author": "路飞",
   "license": "MIT",
   "copyright": "路飞版权所有",
@@ -21,14 +21,16 @@
     "build": "tsc -p tsconfig.main.json && vite build",
     "test": "vitest run",
     "package:win": "npm run package:portable",
-    "package:portable": "npm run package:portable-dir && npm run icon:win -- release\\1.0.5\\win-unpacked && powershell -NoProfile -ExecutionPolicy Bypass -Command \"if (Test-Path 'release/路飞-强提醒会议任务清单免安装版 1.0.5.zip') { Remove-Item 'release/路飞-强提醒会议任务清单免安装版 1.0.5.zip' -Force }; Compress-Archive -Path 'release/1.0.5/win-unpacked/*' -DestinationPath 'release/路飞-强提醒会议任务清单免安装版 1.0.5.zip' -Force\"",
-    "package:portable-dir": "npm run build && electron-builder --win --dir -c.directories.output=release/1.0.5",
+    "package:portable": "npm run package:portable-dir && npm run icon:win -- release\\1.0.6\\win-unpacked && powershell -NoProfile -ExecutionPolicy Bypass -Command \"if (Test-Path 'release/路飞工作清单免安装版 1.0.6.zip') { Remove-Item 'release/路飞工作清单免安装版 1.0.6.zip' -Force }; Compress-Archive -Path 'release/1.0.6/win-unpacked/*' -DestinationPath 'release/路飞工作清单免安装版 1.0.6.zip' -Force\"",
+    "package:portable-dir": "npm run build && electron-builder --win --dir -c.directories.output=release/1.0.6",
+    "build:web": "vite build --outDir web-dist",
+    "package:web": "npm run build:web && powershell -NoProfile -ExecutionPolicy Bypass -Command \"if (Test-Path 'release/路飞工作清单网页版 1.0.6.zip') { Remove-Item 'release/路飞工作清单网页版 1.0.6.zip' -Force }; Compress-Archive -Path 'web-dist/*' -DestinationPath 'release/路飞工作清单网页版 1.0.6.zip' -Force\"",
     "package:installer": "npm run build && electron-builder --win nsis",
     "icon:win": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/apply-win-icon.ps1"
   },
   "build": {
-    "appId": "com.lufei.strongremindermeetingtasklist",
-    "productName": "路飞-强提醒会议任务清单",
+    "appId": "com.lufei.worklist",
+    "productName": "路飞工作清单",
     "directories": {
       "output": "release"
     },
@@ -44,10 +46,10 @@
       "signAndEditExecutable": false
     },
     "portable": {
-      "artifactName": "路飞-强提醒会议任务清单免安装版 ${version}.${ext}"
+      "artifactName": "路飞工作清单免安装版 ${version}.${ext}"
     },
     "nsis": {
-      "artifactName": "路飞-强提醒会议任务清单安装包 ${version}.${ext}",
+      "artifactName": "路飞工作清单安装包 ${version}.${ext}",
       "installerIcon": "build/icon.ico",
       "uninstallerIcon": "build/icon.ico",
       "oneClick": false,

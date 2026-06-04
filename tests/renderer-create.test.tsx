@@ -133,7 +133,7 @@ describe("renderer reminder creation", () => {
     expect(container.querySelector<HTMLInputElement>(".title-input")?.value).toBe("第二个任务");
   });
 
-  it("moves a reminder to completed when the square button is clicked", async () => {
+  it("shows status choices and moves a reminder to completed when completed is selected", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-06-02T08:00:00.000Z"));
     data = {
@@ -149,11 +149,49 @@ describe("renderer reminder creation", () => {
       container.querySelector<HTMLButtonElement>(".complete-toggle")?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
 
+    expect(saveReminder).not.toHaveBeenCalled();
+    expect(container.querySelector(".status-choice-menu")?.textContent).toContain("完成");
+    expect(container.querySelector(".status-choice-menu")?.textContent).toContain("进行中");
+
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>(".complete-choice")?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
     const saved = saveReminder.mock.calls[0]?.[0] as ReminderItem;
     expect(saved.completedAt).toBe("2026-06-02T08:00:00.000Z");
     expect(saved.enabled).toBe(false);
+    expect(saved.progressStatus).toBe("todo");
     expect(container.textContent).toContain("已完成");
     expect(container.querySelector(".reminder-title")?.textContent).toBe("要完成的任务");
+  });
+
+  it("marks a reminder as in progress from the status choices", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-02T08:00:00.000Z"));
+    data = {
+      ...data,
+      reminders: [reminder("a", "正在做的任务")]
+    };
+
+    await act(async () => {
+      root.render(<App />);
+    });
+
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>(".complete-toggle")?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>(".progress-choice")?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    const saved = saveReminder.mock.calls[0]?.[0] as ReminderItem;
+    expect(saved.completedAt).toBeNull();
+    expect(saved.enabled).toBe(true);
+    expect(saved.progressStatus).toBe("inProgress");
+    expect(saved.progressSnoozedUntil).toBe("2026-06-02T08:30:00.000Z");
+    expect(container.querySelector(".pane-header")?.textContent).toContain("进行中");
+    expect(container.querySelector(".reminder-row")?.className).toContain("in-progress");
   });
 
   it("advances a recurring reminder instead of completing the whole task", async () => {
@@ -179,11 +217,15 @@ describe("renderer reminder creation", () => {
     await act(async () => {
       container.querySelector<HTMLButtonElement>(".complete-toggle")?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>(".complete-choice")?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
 
     const saved = saveReminder.mock.calls[0]?.[0] as ReminderItem;
     expect(saved.completedAt).toBeNull();
     expect(saved.enabled).toBe(true);
     expect(saved.startAt).toBe("2026-06-03T10:00:00.000Z");
+    expect(saved.progressStatus).toBe("todo");
     expect(container.textContent).toContain("已完成本次，已生成下次提醒。");
   });
 
@@ -224,14 +266,38 @@ describe("renderer reminder creation", () => {
     expect(options).toEqual(["00", "05", "10", "15", "20", "25", "30", "35", "40", "45", "50", "55"]);
   });
 
-  it("shows TickTick sync before advanced settings", async () => {
+  it("opens settings and TickTick sync from sidebar modal entries", async () => {
     await act(async () => {
       root.render(<App />);
     });
 
-    const text = container.textContent ?? "";
-    expect(text.indexOf("滴答清单同步")).toBeGreaterThan(-1);
-    expect(text.indexOf("滴答清单同步")).toBeLessThan(text.indexOf("更多设置"));
+    const sidebarSettings = container.querySelector(".sidebar-settings");
+    expect(sidebarSettings?.textContent).toContain("设置");
+    expect(sidebarSettings?.textContent).toContain("滴答清单同步");
+    expect(sidebarSettings?.textContent).not.toContain("开机启动");
+    expect(sidebarSettings?.textContent).not.toContain("客户端 ID");
+    expect(sidebarSettings?.textContent).not.toContain("导入");
+
+    const entryButtons = Array.from(container.querySelectorAll<HTMLButtonElement>(".settings-open-button"));
+
+    await act(async () => {
+      entryButtons[0]?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    expect(container.querySelector(".settings-modal")?.textContent).toContain("开机启动");
+    expect(container.querySelector(".settings-modal")?.textContent).toContain("更多设置");
+    expect(container.querySelector(".settings-modal")?.textContent).toContain("导入");
+
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>(".modal-close-button")?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await act(async () => {
+      entryButtons[1]?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    expect(container.querySelector(".settings-modal")?.textContent).toContain("账号区域");
+    expect(container.querySelector(".settings-modal")?.textContent).toContain("客户端 ID");
+    expect(container.querySelector(".settings-modal")?.textContent).toContain("同步");
   });
 
   it("shows yesterday and earlier reminders in the previous view", async () => {

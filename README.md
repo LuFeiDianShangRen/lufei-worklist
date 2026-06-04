@@ -14,8 +14,10 @@ Strong Reminder Meeting Task List
 - 支持托盘后台运行
 - 支持本地 JSON 导入和导出
 - 支持完成任务并移动到已完成列表
+- 支持标记任务为“进行中”，并用黄色状态集中显示
 - 支持“之前”列表，集中查看昨天及以前任务
 - 支持同步滴答清单任务到本地提醒
+- 支持网页版本；桌面版运行时，网页可同步读写同一份本地数据
 - 支持多屏幕置顶飘动提醒条
 - 点击“我马上去做”后，未完成任务会继续按间隔提醒
 - 支持免安装版和安装包打包
@@ -37,7 +39,7 @@ npm run dev
 
 最新 Windows 免安装版：
 
-- [strongremindermeetingtasklist-v1.0.5-windows-portable.zip](https://github.com/LuFeiDianShangRen/strongremindermeetingtasklist/releases/download/v1.0.5/strongremindermeetingtasklist-v1.0.5-windows-portable.zip)
+- [strongremindermeetingtasklist-v1.0.6-windows-portable.zip](https://github.com/LuFeiDianShangRen/strongremindermeetingtasklist/releases/download/v1.0.6/strongremindermeetingtasklist-v1.0.6-windows-portable.zip)
 
 全部版本：
 
@@ -64,8 +66,9 @@ npm run package:portable
 生成结果：
 
 ```text
-release/1.0.5/win-unpacked/路飞-强提醒会议任务清单.exe
-release/路飞-强提醒会议任务清单免安装版 1.0.5.zip
+release/1.0.6/win-unpacked/路飞工作清单.exe
+release/路飞工作清单免安装版 1.0.6.zip
+release/路飞工作清单网页版 1.0.6.zip
 ```
 
 ## 生成安装包
@@ -77,7 +80,7 @@ npm run package:installer
 生成结果：
 
 ```text
-release/路飞-强提醒会议任务清单安装包 1.0.5.exe
+release/路飞工作清单安装包 1.0.6.exe
 ```
 
 ## 数据存储
