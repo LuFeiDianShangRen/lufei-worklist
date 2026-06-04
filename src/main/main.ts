@@ -23,7 +23,7 @@ import { authorizeTickTick, fetchTickTickProjectData } from "./ticktick";
 import { createTrayIconPng } from "./trayIcon";
 import { desktopWebUrl, startDesktopWebServer } from "./webServer";
 
-const appId = "com.lufei.worklist";
+const appId = "com.lufei.strongworklist";
 const isDev = Boolean(process.env.VITE_DEV_SERVER_URL);
 const rendererRoot = isDev ? process.env.VITE_DEV_SERVER_URL! : join(__dirname, "..", "..", "dist");
 const preloadPath = join(__dirname, "..", "preload", "preload.js");
@@ -35,6 +35,8 @@ let scheduler: ReminderScheduler;
 let desktopWebServer: HttpServer | null = null;
 let pendingSecondInstanceShow = false;
 let singleInstanceServer: Server | null = null;
+let lastDisplayMode: AppSettings["lastDisplayMode"] | null = null;
+let displayModeSaveTimer: NodeJS.Timeout | null = null;
 const store = new ReminderStore();
 const overlayWindows = new Map<string, BrowserWindow[]>();
 const overlayWindowKeys = new Map<number, string>();
@@ -155,6 +157,7 @@ function createTray(): void {
       }
     ])
   );
+  tray.on("click", () => showMainWindow());
   tray.on("double-click", () => showMainWindow());
 }
 
@@ -164,9 +167,6 @@ function openDesktopWebVersion(): void {
 
 async function createMainWindow(hidden = false): Promise<void> {
   if (mainWindow && !mainWindow.isDestroyed()) {
-    if (!hidden) {
-      showMainWindow();
-    }
     return;
   }
 
@@ -198,20 +198,18 @@ async function createMainWindow(hidden = false): Promise<void> {
     await mainWindow.loadFile(join(rendererRoot, "index.html"));
   }
 
-  mainWindow.on("close", async (event) => {
+  mainWindow.on("close", (event) => {
     if (quitting) {
       return;
     }
 
     event.preventDefault();
     mainWindow?.hide();
-    const data = await store.getData();
-    await store.updateSettings({ ...data.settings, lastDisplayMode: "tray" });
+    scheduleDisplayModeSave("tray");
   });
 
-  mainWindow.on("show", async () => {
-    const data = await store.getData();
-    await store.updateSettings({ ...data.settings, lastDisplayMode: "visible" });
+  mainWindow.on("show", () => {
+    scheduleDisplayModeSave("visible");
   });
 
   mainWindow.webContents.on("before-input-event", (event, input) => {
@@ -241,7 +239,13 @@ function showMainWindow(selectedReminderId?: string): void {
     if (!mainWindow) {
       return;
     }
-    mainWindow.show();
+
+    if (mainWindow.isMinimized()) {
+      mainWindow.restore();
+    }
+    if (!mainWindow.isVisible()) {
+      mainWindow.show();
+    }
     mainWindow.focus();
     if (selectedReminderId) {
       mainWindow.webContents.send("reminder:focus", selectedReminderId);
@@ -301,6 +305,31 @@ async function applyLoginItemSettings(settings: AppSettings): Promise<void> {
     openAtLogin: settings.startAtLogin,
     args: ["--hidden"]
   });
+}
+
+function scheduleDisplayModeSave(mode: AppSettings["lastDisplayMode"]): void {
+  if (lastDisplayMode === mode) {
+    return;
+  }
+
+  lastDisplayMode = mode;
+
+  if (displayModeSaveTimer) {
+    clearTimeout(displayModeSaveTimer);
+  }
+
+  displayModeSaveTimer = setTimeout(() => {
+    displayModeSaveTimer = null;
+    void store
+      .getData()
+      .then((data) => {
+        if (data.settings.lastDisplayMode === mode) {
+          return data;
+        }
+        return store.updateSettings({ ...data.settings, lastDisplayMode: mode });
+      })
+      .catch(() => undefined);
+  }, 500);
 }
 
 function createOverlayWindow(alert: AlertOccurrence, displayBounds: Electron.Rectangle): BrowserWindow {
@@ -649,6 +678,7 @@ function registerAppLifecycle(): void {
 
   app.whenReady().then(async () => {
     const data = await store.getData();
+    lastDisplayMode = data.settings.lastDisplayMode;
     await applyLoginItemSettings(data.settings);
     Menu.setApplicationMenu(null);
     createTray();

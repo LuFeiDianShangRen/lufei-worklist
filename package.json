@@ -1,6 +1,6 @@
 {
   "name": "strongremindermeetingtasklist",
-  "version": "1.0.8",
+  "version": "1.0.9",
   "private": true,
   "description": "Strong Reminder Meeting Task List for Windows.",
   "main": "dist-electron/main/main.js",
@@ -21,15 +21,15 @@
     "build": "tsc -p tsconfig.main.json && vite build",
     "test": "vitest run",
     "package:win": "npm run package:portable",
-    "package:portable": "npm run package:portable-dir && npm run icon:win -- release\\1.0.8\\win-unpacked && powershell -NoProfile -ExecutionPolicy Bypass -Command \"if (Test-Path 'release/路飞工作清单免安装版 1.0.8.zip') { Remove-Item 'release/路飞工作清单免安装版 1.0.8.zip' -Force }; Compress-Archive -Path 'release/1.0.8/win-unpacked/*' -DestinationPath 'release/路飞工作清单免安装版 1.0.8.zip' -Force\"",
-    "package:portable-dir": "npm run build && electron-builder --win --dir -c.directories.output=release/1.0.8",
+    "package:portable": "npm run package:portable-dir && npm run icon:win -- release\\1.0.9\\win-unpacked && powershell -NoProfile -ExecutionPolicy Bypass -Command \"if (Test-Path 'release/路飞工作清单免安装版 1.0.9.zip') { Remove-Item 'release/路飞工作清单免安装版 1.0.9.zip' -Force }; Compress-Archive -Path 'release/1.0.9/win-unpacked/*' -DestinationPath 'release/路飞工作清单免安装版 1.0.9.zip' -Force\"",
+    "package:portable-dir": "npm run build && electron-builder --win --dir -c.directories.output=release/1.0.9",
     "build:web": "vite build --outDir web-dist",
-    "package:web": "npm run build:web && powershell -NoProfile -ExecutionPolicy Bypass -Command \"if (Test-Path 'release/路飞工作清单网页版 1.0.8.zip') { Remove-Item 'release/路飞工作清单网页版 1.0.8.zip' -Force }; Compress-Archive -Path 'web-dist/*' -DestinationPath 'release/路飞工作清单网页版 1.0.8.zip' -Force\"",
+    "package:web": "npm run build:web && powershell -NoProfile -ExecutionPolicy Bypass -Command \"if (Test-Path 'release/路飞工作清单网页版 1.0.9.zip') { Remove-Item 'release/路飞工作清单网页版 1.0.9.zip' -Force }; Compress-Archive -Path 'web-dist/*' -DestinationPath 'release/路飞工作清单网页版 1.0.9.zip' -Force\"",
     "package:installer": "npm run build && electron-builder --win nsis",
     "icon:win": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/apply-win-icon.ps1"
   },
   "build": {
-    "appId": "com.lufei.worklist",
+    "appId": "com.lufei.strongworklist",
     "productName": "路飞工作清单",
     "directories": {
       "output": "release"

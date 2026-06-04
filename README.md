@@ -42,7 +42,7 @@ npm run dev
 
 最新 Windows 免安装版：
 
-- [strongremindermeetingtasklist-v1.0.8-windows-portable.zip](https://github.com/LuFeiDianShangRen/strongremindermeetingtasklist/releases/download/v1.0.8/strongremindermeetingtasklist-v1.0.8-windows-portable.zip)
+- [strongremindermeetingtasklist-v1.0.9-windows-portable.zip](https://github.com/LuFeiDianShangRen/strongremindermeetingtasklist/releases/download/v1.0.9/strongremindermeetingtasklist-v1.0.9-windows-portable.zip)
 
 全部版本：
 
@@ -69,8 +69,8 @@ npm run package:portable
 生成结果：
 
 ```text
-release/1.0.8/win-unpacked/路飞工作清单.exe
-release/路飞工作清单免安装版 1.0.8.zip
+release/1.0.9/win-unpacked/路飞工作清单.exe
+release/路飞工作清单免安装版 1.0.9.zip
 ```
 
 ## 生成安装包
@@ -82,7 +82,7 @@ npm run package:installer
 生成结果：
 
 ```text
-release/路飞工作清单安装包 1.0.8.exe
+release/路飞工作清单安装包 1.0.9.exe
 ```
 
 ## 数据存储
